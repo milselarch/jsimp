@@ -160,12 +160,7 @@ class BrentKung(object):
             f'XKHA0 p0 s0 bus',
             f'XKHA sp[31:1] c[30:0] s[31:1] xor2'
         ]
-        """
-        for k in range(1, num_bits):
-            adder_lines.append(
-                f'XKHA{k} sp{k} c{k-1} s{k} xor2'
-            )
-        """
+
         jsim_lines.append('')
         jsim_lines.extend(adder_lines)
         jsim_lines.append('')
