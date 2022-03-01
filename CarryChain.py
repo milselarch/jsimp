@@ -1,11 +1,13 @@
 import math
 import textwrap
+
+from BinNumber import BinNumber
 from typing import List
 
 template_code = textwrap.dedent("""
 .include "nominal.jsim"
 .include "stdcell.jsim"
-.include "test_debug.jsim"
+.include "2dcheckoff_3ns.jsim"
 
 * .subckt adder32 subtract xa[31:0] b[31:0] s[31:0] z v n p[31:1]
 
@@ -51,16 +53,15 @@ XXOR_PT2 xor_ab c xor_out xor2
 
 * propogate carry g
 **********************************
-* g_new = gp + pp * gn
+* g0_[n] = sg[n] + p0_[n] * g0_[n-1]
 * = ~((~gp)*~(pp*gn))
 * = NAND2(INV(gp), NAND2(pp, gn))
 **********************************
-.subckt prop_g gp pp gn g_new
-* XPROP_NAND_PROP pp gn nand_prod nand2
-* XPROP_INV gp gp_inv inverter
-* XPROP_NAND_END gp_inv nand_prod g_new nand2
-XTEST1 pp gn out1 and2
-XTEST2 out1 gp g_new or2
+.subckt g_prop g_now p_now g_prev g_new
+XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
+XPROP_GEN g_new_inv g_new inverter_4
+* XPROP_GEN1 p_now g_prev prop_generate and2
+* XPROP_GEN2 g_now prop_generate g_new or2
 .ends
 **********************************
 """)
@@ -95,20 +96,20 @@ class CarryChain(object):
     def build_jsim(self, counter=1):
         c, n = counter, self.end
         end, start = self.to_tuple()
-        new_g = f'g{start}_{end}'
-        new_p = f'p{start}_{end}'
+        combine_g = f'g{start}_{end}'
+        combine_p = f'p{start}_{end}'
 
         if self.is_single:
             assert start == end
 
             return [
-                f'* tie sg{n} to {new_g}',
+                f'* tie sg{n} to {combine_g}',
                 # f'XG{c} a{n} b{n} sg{n}_inv nand2',
                 # f'XG{c}_INV sg{n}_inv sg{n} inverter_4',
                 f'XG{c}_INV a{n} b{n} sg{n} and2',
-                f'XP{c} a{n} b{n} sp{n} fast_xor',
-                f'XBUS_G{c} sg{n} {new_g} bus',
-                f'XBUS_P{c} sp{n} {new_p} bus',
+                f'XP{c} a{n} b{n} sp{n} xor2',
+                f'XBUS_G{c} sg{n} {combine_g} bus',
+                f'XBUS_P{c} sp{n} {combine_p} bus',
                 f''
             ], c
 
@@ -123,17 +124,17 @@ class CarryChain(object):
 
         jsim_lines = [
             f'* carry propagate from bit {start} to bit {end}',
-            f'XCHAIN_G{c} {prev_g} {prev_p} {sub_g} {new_g} prop_g',
-            f'XCHAIN_P{c}_INV {prev_p} {sub_p} {new_p}_inv nand2',
-            f'XCHAIN_P{c} {new_p}_inv {new_p} inverter_4'
+            f'XCHAIN_G{c} {sub_g} {sub_p} {prev_g} {combine_g} g_prop',
+            f'XCHAIN_P{c}_INV {prev_p} {sub_p} {combine_p}_inv nand2',
+            f'XCHAIN_P{c} {combine_p}_inv {combine_p} inverter_4'
         ]
 
         if start == 0:
             # create input carry bit
             jsim_lines.extend([
                 f'* create input carry bit {end}',
-                f'XBUS_C{c} {new_g} c{end} bus',
-                F'XBUS_P{c} {new_p} p{end} bus'
+                f'XBUS_C{c} {combine_g} c{end} bus',
+                F'XBUS_P{c} {combine_p} p{end} bus'
             ])
 
         jsim_lines.append('')
@@ -166,6 +167,42 @@ class CarryChain(object):
 
         path = sub_path + [(bootstrap - 1, offset)]
         return path
+
+    def get_single_carry(
+        self, bin_a: BinNumber, bin_b: BinNumber,
+        cin=False
+    ):
+        i = self.end
+
+        if cin and (i == 0):
+            p = bin_a[i] ^ bin_b[i] ^ cin
+            g = (
+                (bin_a[i] & bin_b[i]) |
+                (bin_a[i] & cin) | (bin_b[i] & cin)
+            )
+
+            return g, p
+
+        g = bin_a[i] & bin_b[i]
+        p = bin_a[i] ^ bin_b[i]
+        # g = 0 if (i == 0) else g
+        # p = 1 if (i == 0) else p
+        return g, p
+
+    def compute_carry(self, bin_a, bin_b, cin=False):
+        if self.is_single:
+            return self.get_single_carry(bin_a, bin_b, cin=cin)
+
+        chain1, chain2 = self.decompose(smart=True)
+        assert chain1.start > chain2.end
+        gn, pn = chain1.compute_carry(bin_a, bin_b, cin=cin)
+        gp, pp = chain2.compute_carry(bin_a, bin_b, cin=cin)
+        g, p = self.propogate(gn, pn, gp, pp)
+        return g, p
+
+    @staticmethod
+    def propogate(a1, b1, a2, b2):
+        return a1 | (b1 & a2), b1 & b2
 
     def smart_decompose(self):
         sub_chains = self.decompose(smart=False)

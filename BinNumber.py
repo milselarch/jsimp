@@ -6,25 +6,42 @@ class BinNumber(object):
     def __init__(
         self, num, num_bits=32, hex_val=None
     ):
-        if num < 0:
-            negative = True
-            num = num + 2 ** (num_bits - 1)
-        else:
-            negative = False
-
         self.num_bits = num_bits
-        self.bits = self.fill_bits(
-            num, num_bits=num_bits, negative=negative
-        )
+
+        if type(num) == list:
+            self.bits = copy.deepcopy(num)
+            assert len(self.bits) == num_bits
+        else:
+            if num < 0:
+                negative = True
+                num = num + 2 ** (num_bits - 1)
+            else:
+                negative = False
+
+            self.bits = self.fill_bits(
+                num, num_bits=num_bits, negative=negative
+            )
 
         if hex_val is not None:
             assert hex_val == self.to_decimal(
                 self.bits, False
             )
 
+    @classmethod
+    def from_bits(cls, bits, num_bits=32):
+        pass
+
+    def __getitem__(self, index):
+        assert index >= 0
+        return self.bits[self.num_bits - index - 1]
+
     @property
     def is_negative(self):
         return self.bits[0] == 1
+
+    @property
+    def is_positive(self):
+        return not self.is_negative
 
     def to_decimal(self, bits=None, complement=True):
         number = 0

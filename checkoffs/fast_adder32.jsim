@@ -1,7 +1,7 @@
 
 .include "nominal.jsim"
 .include "stdcell.jsim"
-.include "test_debug.jsim"
+.include "2dcheckoff_3ns.jsim"
 
 * .subckt adder32 subtract xa[31:0] b[31:0] s[31:0] z v n p[31:1]
 
@@ -47,24 +47,25 @@ XXOR_PT2 xor_ab c xor_out xor2
 
 * propogate carry g
 **********************************
-* g_new = gp + pp * gn
+* g0_[n] = sg[n] + p0_[n] * g0_[n-1]
 * = ~((~gp)*~(pp*gn))
 * = NAND2(INV(gp), NAND2(pp, gn))
 **********************************
-.subckt prop_g gp pp gn g_new
-* XPROP_NAND_PROP pp gn nand_prod nand2
-* XPROP_INV gp gp_inv inverter
-* XPROP_NAND_END gp_inv nand_prod g_new nand2
-XTEST1 pp gn out1 and2
-XTEST2 out1 gp g_new or2
+.subckt g_prop g_now p_now g_prev g_new
+XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
+XPROP_GEN g_new_inv g_new inverter_4
+* XPROP_GEN1 p_now g_prev prop_generate and2
+* XPROP_GEN2 g_now prop_generate g_new or2
 .ends
 **********************************
 
-.subckt adder32 subtract a[31:0] xb[31:0] s[31:0] z v n p[31:0] c[31:0]
-XXOR_B xb[31:0] subtract#32 b[31:0] fast_xor
-XBUS_C0 subtract c0 bus
-XBUS_P0 0 p0 bus
-XBUS_G0 0 g0 bus
+.subckt adder32 subtract a[31:0] xb[31:0] s[31:0] z v n 
+* p[31:0] c[31:0]
+XSUBTRACT_BUFFER subtract subtract_buffer buffer_8
+XXOR_B xb[31:0] subtract_buffer#32 b[31:0] xor2
+XBUS_C0 g0_0 c0 bus
+XBUS_P0 p0 p0_0 bus
+XBUS_G0 g0 g0_0 bus
 XBUS_N s31 n bus
 
 **********************************
@@ -80,735 +81,724 @@ XV_NAND2 a31 b31 s31_inv v_nand_prod2 nand3
 XV_NAND_OUT v_nand_prod1 v_nand_prod2 v nand2
 **********************************
 
-* tie sg0 to g0_0
-XG1_INV a0 b0 sg0 and2
-XP1 a0 b0 sp0 fast_xor
-XBUS_G1 sg0 g0_0 bus
-XBUS_P1 sp0 p0_0 bus
+
+**********************************
+* generate single g, p bits
+* XG_GEN a[31:1] b[31:1] sg[31:1] and2
+* XP_GEN a[31:1] b[31:1] sp[31:1] xor2
+* XG_BUS sg[31:1] g[31:1]_[31:1] bus
+* XP_BUS sp[31:1] p[31:1]_[31:1] bus
+* special case for bit 0 with +1 from sub op
+**********************************
+* if two of a0, b0, or subtract are true, sg0 = 1
+**********************************
+* sg0 = a0*b0 + a0*s0 + b0*s0
+* = ~(~(a0*b0)*~(a0*s0)*~(b0*s0))
+* = NAND3(NAND2(a0,b0), NAND2(a0,s0), NAND2(b0,s0)
+**********************************
+XP_GEN0 a[0] b[0] subtract_buffer sp0 xor3
+XP_GEN0_BUS sp0 p0 bus
+XG_GEN0_SUB1 a[0] b[0] g0_nand_ab nand2
+XG_GEN0_SUB2 a[0] subtract_buffer g0_nand_as nand2
+XG_GEN0_SUB3 b[0] subtract_buffer g0_nand_bs nand2
+XG_GEN0 g0_nand_ab g0_nand_as g0_nand_bs sg0 nand3
+XG_GEN0_BUS sg0 g0_0 bus
+**********************************
 
 * tie sg1 to g1_1
-XG2_INV a1 b1 sg1 and2
-XP2 a1 b1 sp1 fast_xor
-XBUS_G2 sg1 g1_1 bus
-XBUS_P2 sp1 p1_1 bus
+XG1_INV a1 b1 sg1 and2
+XP1 a1 b1 sp1 xor2
+XBUS_G1 sg1 g1_1 bus
+XBUS_P1 sp1 p1_1 bus
 
 * tie sg2 to g2_2
-XG3_INV a2 b2 sg2 and2
-XP3 a2 b2 sp2 fast_xor
-XBUS_G3 sg2 g2_2 bus
-XBUS_P3 sp2 p2_2 bus
+XG2_INV a2 b2 sg2 and2
+XP2 a2 b2 sp2 xor2
+XBUS_G2 sg2 g2_2 bus
+XBUS_P2 sp2 p2_2 bus
 
 * tie sg3 to g3_3
-XG4_INV a3 b3 sg3 and2
-XP4 a3 b3 sp3 fast_xor
-XBUS_G4 sg3 g3_3 bus
-XBUS_P4 sp3 p3_3 bus
+XG3_INV a3 b3 sg3 and2
+XP3 a3 b3 sp3 xor2
+XBUS_G3 sg3 g3_3 bus
+XBUS_P3 sp3 p3_3 bus
 
 * tie sg4 to g4_4
-XG5_INV a4 b4 sg4 and2
-XP5 a4 b4 sp4 fast_xor
-XBUS_G5 sg4 g4_4 bus
-XBUS_P5 sp4 p4_4 bus
+XG4_INV a4 b4 sg4 and2
+XP4 a4 b4 sp4 xor2
+XBUS_G4 sg4 g4_4 bus
+XBUS_P4 sp4 p4_4 bus
 
 * tie sg5 to g5_5
-XG6_INV a5 b5 sg5 and2
-XP6 a5 b5 sp5 fast_xor
-XBUS_G6 sg5 g5_5 bus
-XBUS_P6 sp5 p5_5 bus
+XG5_INV a5 b5 sg5 and2
+XP5 a5 b5 sp5 xor2
+XBUS_G5 sg5 g5_5 bus
+XBUS_P5 sp5 p5_5 bus
 
 * tie sg6 to g6_6
-XG7_INV a6 b6 sg6 and2
-XP7 a6 b6 sp6 fast_xor
-XBUS_G7 sg6 g6_6 bus
-XBUS_P7 sp6 p6_6 bus
+XG6_INV a6 b6 sg6 and2
+XP6 a6 b6 sp6 xor2
+XBUS_G6 sg6 g6_6 bus
+XBUS_P6 sp6 p6_6 bus
 
 * tie sg7 to g7_7
-XG8_INV a7 b7 sg7 and2
-XP8 a7 b7 sp7 fast_xor
-XBUS_G8 sg7 g7_7 bus
-XBUS_P8 sp7 p7_7 bus
+XG7_INV a7 b7 sg7 and2
+XP7 a7 b7 sp7 xor2
+XBUS_G7 sg7 g7_7 bus
+XBUS_P7 sp7 p7_7 bus
 
 * tie sg8 to g8_8
-XG9_INV a8 b8 sg8 and2
-XP9 a8 b8 sp8 fast_xor
-XBUS_G9 sg8 g8_8 bus
-XBUS_P9 sp8 p8_8 bus
+XG8_INV a8 b8 sg8 and2
+XP8 a8 b8 sp8 xor2
+XBUS_G8 sg8 g8_8 bus
+XBUS_P8 sp8 p8_8 bus
 
 * tie sg9 to g9_9
-XG10_INV a9 b9 sg9 and2
-XP10 a9 b9 sp9 fast_xor
-XBUS_G10 sg9 g9_9 bus
-XBUS_P10 sp9 p9_9 bus
+XG9_INV a9 b9 sg9 and2
+XP9 a9 b9 sp9 xor2
+XBUS_G9 sg9 g9_9 bus
+XBUS_P9 sp9 p9_9 bus
 
 * tie sg10 to g10_10
-XG11_INV a10 b10 sg10 and2
-XP11 a10 b10 sp10 fast_xor
-XBUS_G11 sg10 g10_10 bus
-XBUS_P11 sp10 p10_10 bus
+XG10_INV a10 b10 sg10 and2
+XP10 a10 b10 sp10 xor2
+XBUS_G10 sg10 g10_10 bus
+XBUS_P10 sp10 p10_10 bus
 
 * tie sg11 to g11_11
-XG12_INV a11 b11 sg11 and2
-XP12 a11 b11 sp11 fast_xor
-XBUS_G12 sg11 g11_11 bus
-XBUS_P12 sp11 p11_11 bus
+XG11_INV a11 b11 sg11 and2
+XP11 a11 b11 sp11 xor2
+XBUS_G11 sg11 g11_11 bus
+XBUS_P11 sp11 p11_11 bus
 
 * tie sg12 to g12_12
-XG13_INV a12 b12 sg12 and2
-XP13 a12 b12 sp12 fast_xor
-XBUS_G13 sg12 g12_12 bus
-XBUS_P13 sp12 p12_12 bus
+XG12_INV a12 b12 sg12 and2
+XP12 a12 b12 sp12 xor2
+XBUS_G12 sg12 g12_12 bus
+XBUS_P12 sp12 p12_12 bus
 
 * tie sg13 to g13_13
-XG14_INV a13 b13 sg13 and2
-XP14 a13 b13 sp13 fast_xor
-XBUS_G14 sg13 g13_13 bus
-XBUS_P14 sp13 p13_13 bus
+XG13_INV a13 b13 sg13 and2
+XP13 a13 b13 sp13 xor2
+XBUS_G13 sg13 g13_13 bus
+XBUS_P13 sp13 p13_13 bus
 
 * tie sg14 to g14_14
-XG15_INV a14 b14 sg14 and2
-XP15 a14 b14 sp14 fast_xor
-XBUS_G15 sg14 g14_14 bus
-XBUS_P15 sp14 p14_14 bus
+XG14_INV a14 b14 sg14 and2
+XP14 a14 b14 sp14 xor2
+XBUS_G14 sg14 g14_14 bus
+XBUS_P14 sp14 p14_14 bus
 
 * tie sg15 to g15_15
-XG16_INV a15 b15 sg15 and2
-XP16 a15 b15 sp15 fast_xor
-XBUS_G16 sg15 g15_15 bus
-XBUS_P16 sp15 p15_15 bus
+XG15_INV a15 b15 sg15 and2
+XP15 a15 b15 sp15 xor2
+XBUS_G15 sg15 g15_15 bus
+XBUS_P15 sp15 p15_15 bus
 
 * tie sg16 to g16_16
-XG17_INV a16 b16 sg16 and2
-XP17 a16 b16 sp16 fast_xor
-XBUS_G17 sg16 g16_16 bus
-XBUS_P17 sp16 p16_16 bus
+XG16_INV a16 b16 sg16 and2
+XP16 a16 b16 sp16 xor2
+XBUS_G16 sg16 g16_16 bus
+XBUS_P16 sp16 p16_16 bus
 
 * tie sg17 to g17_17
-XG18_INV a17 b17 sg17 and2
-XP18 a17 b17 sp17 fast_xor
-XBUS_G18 sg17 g17_17 bus
-XBUS_P18 sp17 p17_17 bus
+XG17_INV a17 b17 sg17 and2
+XP17 a17 b17 sp17 xor2
+XBUS_G17 sg17 g17_17 bus
+XBUS_P17 sp17 p17_17 bus
 
 * tie sg18 to g18_18
-XG19_INV a18 b18 sg18 and2
-XP19 a18 b18 sp18 fast_xor
-XBUS_G19 sg18 g18_18 bus
-XBUS_P19 sp18 p18_18 bus
+XG18_INV a18 b18 sg18 and2
+XP18 a18 b18 sp18 xor2
+XBUS_G18 sg18 g18_18 bus
+XBUS_P18 sp18 p18_18 bus
 
 * tie sg19 to g19_19
-XG20_INV a19 b19 sg19 and2
-XP20 a19 b19 sp19 fast_xor
-XBUS_G20 sg19 g19_19 bus
-XBUS_P20 sp19 p19_19 bus
+XG19_INV a19 b19 sg19 and2
+XP19 a19 b19 sp19 xor2
+XBUS_G19 sg19 g19_19 bus
+XBUS_P19 sp19 p19_19 bus
 
 * tie sg20 to g20_20
-XG21_INV a20 b20 sg20 and2
-XP21 a20 b20 sp20 fast_xor
-XBUS_G21 sg20 g20_20 bus
-XBUS_P21 sp20 p20_20 bus
+XG20_INV a20 b20 sg20 and2
+XP20 a20 b20 sp20 xor2
+XBUS_G20 sg20 g20_20 bus
+XBUS_P20 sp20 p20_20 bus
 
 * tie sg21 to g21_21
-XG22_INV a21 b21 sg21 and2
-XP22 a21 b21 sp21 fast_xor
-XBUS_G22 sg21 g21_21 bus
-XBUS_P22 sp21 p21_21 bus
+XG21_INV a21 b21 sg21 and2
+XP21 a21 b21 sp21 xor2
+XBUS_G21 sg21 g21_21 bus
+XBUS_P21 sp21 p21_21 bus
 
 * tie sg22 to g22_22
-XG23_INV a22 b22 sg22 and2
-XP23 a22 b22 sp22 fast_xor
-XBUS_G23 sg22 g22_22 bus
-XBUS_P23 sp22 p22_22 bus
+XG22_INV a22 b22 sg22 and2
+XP22 a22 b22 sp22 xor2
+XBUS_G22 sg22 g22_22 bus
+XBUS_P22 sp22 p22_22 bus
 
 * tie sg23 to g23_23
-XG24_INV a23 b23 sg23 and2
-XP24 a23 b23 sp23 fast_xor
-XBUS_G24 sg23 g23_23 bus
-XBUS_P24 sp23 p23_23 bus
+XG23_INV a23 b23 sg23 and2
+XP23 a23 b23 sp23 xor2
+XBUS_G23 sg23 g23_23 bus
+XBUS_P23 sp23 p23_23 bus
 
 * tie sg24 to g24_24
-XG25_INV a24 b24 sg24 and2
-XP25 a24 b24 sp24 fast_xor
-XBUS_G25 sg24 g24_24 bus
-XBUS_P25 sp24 p24_24 bus
+XG24_INV a24 b24 sg24 and2
+XP24 a24 b24 sp24 xor2
+XBUS_G24 sg24 g24_24 bus
+XBUS_P24 sp24 p24_24 bus
 
 * tie sg25 to g25_25
-XG26_INV a25 b25 sg25 and2
-XP26 a25 b25 sp25 fast_xor
-XBUS_G26 sg25 g25_25 bus
-XBUS_P26 sp25 p25_25 bus
+XG25_INV a25 b25 sg25 and2
+XP25 a25 b25 sp25 xor2
+XBUS_G25 sg25 g25_25 bus
+XBUS_P25 sp25 p25_25 bus
 
 * tie sg26 to g26_26
-XG27_INV a26 b26 sg26 and2
-XP27 a26 b26 sp26 fast_xor
-XBUS_G27 sg26 g26_26 bus
-XBUS_P27 sp26 p26_26 bus
+XG26_INV a26 b26 sg26 and2
+XP26 a26 b26 sp26 xor2
+XBUS_G26 sg26 g26_26 bus
+XBUS_P26 sp26 p26_26 bus
 
 * tie sg27 to g27_27
-XG28_INV a27 b27 sg27 and2
-XP28 a27 b27 sp27 fast_xor
-XBUS_G28 sg27 g27_27 bus
-XBUS_P28 sp27 p27_27 bus
+XG27_INV a27 b27 sg27 and2
+XP27 a27 b27 sp27 xor2
+XBUS_G27 sg27 g27_27 bus
+XBUS_P27 sp27 p27_27 bus
 
 * tie sg28 to g28_28
-XG29_INV a28 b28 sg28 and2
-XP29 a28 b28 sp28 fast_xor
-XBUS_G29 sg28 g28_28 bus
-XBUS_P29 sp28 p28_28 bus
+XG28_INV a28 b28 sg28 and2
+XP28 a28 b28 sp28 xor2
+XBUS_G28 sg28 g28_28 bus
+XBUS_P28 sp28 p28_28 bus
 
 * tie sg29 to g29_29
-XG30_INV a29 b29 sg29 and2
-XP30 a29 b29 sp29 fast_xor
-XBUS_G30 sg29 g29_29 bus
-XBUS_P30 sp29 p29_29 bus
+XG29_INV a29 b29 sg29 and2
+XP29 a29 b29 sp29 xor2
+XBUS_G29 sg29 g29_29 bus
+XBUS_P29 sp29 p29_29 bus
 
 * tie sg30 to g30_30
-XG31_INV a30 b30 sg30 and2
-XP31 a30 b30 sp30 fast_xor
-XBUS_G31 sg30 g30_30 bus
-XBUS_P31 sp30 p30_30 bus
+XG30_INV a30 b30 sg30 and2
+XP30 a30 b30 sp30 xor2
+XBUS_G30 sg30 g30_30 bus
+XBUS_P30 sp30 p30_30 bus
 
 * tie sg31 to g31_31
-XG32_INV a31 b31 sg31 and2
-XP32 a31 b31 sp31 fast_xor
-XBUS_G32 sg31 g31_31 bus
-XBUS_P32 sp31 p31_31 bus
+XG31_INV a31 b31 sg31 and2
+XP31 a31 b31 sp31 xor2
+XBUS_G31 sg31 g31_31 bus
+XBUS_P31 sp31 p31_31 bus
 
 * carry propagate from bit 0 to bit 1
-XCHAIN_G33 g0_0 p0_0 g1_1 g0_1 prop_g
-XCHAIN_P33_INV p0_0 p1_1 p0_1_inv nand2
-XCHAIN_P33 p0_1_inv p0_1 inverter_4
+XCHAIN_G32 g1_1 p1_1 g0_0 g0_1 g_prop
+XCHAIN_P32_INV p0_0 p1_1 p0_1_inv nand2
+XCHAIN_P32 p0_1_inv p0_1 inverter_4
 * create input carry bit 1
-XBUS_C33 g0_1 c1 bus
-XBUS_P33 p0_1 p1 bus
+XBUS_C32 g0_1 c1 bus
+XBUS_P32 p0_1 p1 bus
 
 * carry propagate from bit 2 to bit 3
-XCHAIN_G34 g2_2 p2_2 g3_3 g2_3 prop_g
-XCHAIN_P34_INV p2_2 p3_3 p2_3_inv nand2
-XCHAIN_P34 p2_3_inv p2_3 inverter_4
+XCHAIN_G33 g3_3 p3_3 g2_2 g2_3 g_prop
+XCHAIN_P33_INV p2_2 p3_3 p2_3_inv nand2
+XCHAIN_P33 p2_3_inv p2_3 inverter_4
 
 * carry propagate from bit 4 to bit 5
-XCHAIN_G35 g4_4 p4_4 g5_5 g4_5 prop_g
-XCHAIN_P35_INV p4_4 p5_5 p4_5_inv nand2
-XCHAIN_P35 p4_5_inv p4_5 inverter_4
+XCHAIN_G34 g5_5 p5_5 g4_4 g4_5 g_prop
+XCHAIN_P34_INV p4_4 p5_5 p4_5_inv nand2
+XCHAIN_P34 p4_5_inv p4_5 inverter_4
 
 * carry propagate from bit 6 to bit 7
-XCHAIN_G36 g6_6 p6_6 g7_7 g6_7 prop_g
-XCHAIN_P36_INV p6_6 p7_7 p6_7_inv nand2
-XCHAIN_P36 p6_7_inv p6_7 inverter_4
+XCHAIN_G35 g7_7 p7_7 g6_6 g6_7 g_prop
+XCHAIN_P35_INV p6_6 p7_7 p6_7_inv nand2
+XCHAIN_P35 p6_7_inv p6_7 inverter_4
 
 * carry propagate from bit 8 to bit 9
-XCHAIN_G37 g8_8 p8_8 g9_9 g8_9 prop_g
-XCHAIN_P37_INV p8_8 p9_9 p8_9_inv nand2
-XCHAIN_P37 p8_9_inv p8_9 inverter_4
+XCHAIN_G36 g9_9 p9_9 g8_8 g8_9 g_prop
+XCHAIN_P36_INV p8_8 p9_9 p8_9_inv nand2
+XCHAIN_P36 p8_9_inv p8_9 inverter_4
 
 * carry propagate from bit 10 to bit 11
-XCHAIN_G38 g10_10 p10_10 g11_11 g10_11 prop_g
-XCHAIN_P38_INV p10_10 p11_11 p10_11_inv nand2
-XCHAIN_P38 p10_11_inv p10_11 inverter_4
+XCHAIN_G37 g11_11 p11_11 g10_10 g10_11 g_prop
+XCHAIN_P37_INV p10_10 p11_11 p10_11_inv nand2
+XCHAIN_P37 p10_11_inv p10_11 inverter_4
 
 * carry propagate from bit 12 to bit 13
-XCHAIN_G39 g12_12 p12_12 g13_13 g12_13 prop_g
-XCHAIN_P39_INV p12_12 p13_13 p12_13_inv nand2
-XCHAIN_P39 p12_13_inv p12_13 inverter_4
+XCHAIN_G38 g13_13 p13_13 g12_12 g12_13 g_prop
+XCHAIN_P38_INV p12_12 p13_13 p12_13_inv nand2
+XCHAIN_P38 p12_13_inv p12_13 inverter_4
 
 * carry propagate from bit 14 to bit 15
-XCHAIN_G40 g14_14 p14_14 g15_15 g14_15 prop_g
-XCHAIN_P40_INV p14_14 p15_15 p14_15_inv nand2
-XCHAIN_P40 p14_15_inv p14_15 inverter_4
+XCHAIN_G39 g15_15 p15_15 g14_14 g14_15 g_prop
+XCHAIN_P39_INV p14_14 p15_15 p14_15_inv nand2
+XCHAIN_P39 p14_15_inv p14_15 inverter_4
 
 * carry propagate from bit 16 to bit 17
-XCHAIN_G41 g16_16 p16_16 g17_17 g16_17 prop_g
-XCHAIN_P41_INV p16_16 p17_17 p16_17_inv nand2
-XCHAIN_P41 p16_17_inv p16_17 inverter_4
+XCHAIN_G40 g17_17 p17_17 g16_16 g16_17 g_prop
+XCHAIN_P40_INV p16_16 p17_17 p16_17_inv nand2
+XCHAIN_P40 p16_17_inv p16_17 inverter_4
 
 * carry propagate from bit 18 to bit 19
-XCHAIN_G42 g18_18 p18_18 g19_19 g18_19 prop_g
-XCHAIN_P42_INV p18_18 p19_19 p18_19_inv nand2
-XCHAIN_P42 p18_19_inv p18_19 inverter_4
+XCHAIN_G41 g19_19 p19_19 g18_18 g18_19 g_prop
+XCHAIN_P41_INV p18_18 p19_19 p18_19_inv nand2
+XCHAIN_P41 p18_19_inv p18_19 inverter_4
 
 * carry propagate from bit 20 to bit 21
-XCHAIN_G43 g20_20 p20_20 g21_21 g20_21 prop_g
-XCHAIN_P43_INV p20_20 p21_21 p20_21_inv nand2
-XCHAIN_P43 p20_21_inv p20_21 inverter_4
+XCHAIN_G42 g21_21 p21_21 g20_20 g20_21 g_prop
+XCHAIN_P42_INV p20_20 p21_21 p20_21_inv nand2
+XCHAIN_P42 p20_21_inv p20_21 inverter_4
 
 * carry propagate from bit 22 to bit 23
-XCHAIN_G44 g22_22 p22_22 g23_23 g22_23 prop_g
-XCHAIN_P44_INV p22_22 p23_23 p22_23_inv nand2
-XCHAIN_P44 p22_23_inv p22_23 inverter_4
+XCHAIN_G43 g23_23 p23_23 g22_22 g22_23 g_prop
+XCHAIN_P43_INV p22_22 p23_23 p22_23_inv nand2
+XCHAIN_P43 p22_23_inv p22_23 inverter_4
 
 * carry propagate from bit 24 to bit 25
-XCHAIN_G45 g24_24 p24_24 g25_25 g24_25 prop_g
-XCHAIN_P45_INV p24_24 p25_25 p24_25_inv nand2
-XCHAIN_P45 p24_25_inv p24_25 inverter_4
+XCHAIN_G44 g25_25 p25_25 g24_24 g24_25 g_prop
+XCHAIN_P44_INV p24_24 p25_25 p24_25_inv nand2
+XCHAIN_P44 p24_25_inv p24_25 inverter_4
 
 * carry propagate from bit 26 to bit 27
-XCHAIN_G46 g26_26 p26_26 g27_27 g26_27 prop_g
-XCHAIN_P46_INV p26_26 p27_27 p26_27_inv nand2
-XCHAIN_P46 p26_27_inv p26_27 inverter_4
+XCHAIN_G45 g27_27 p27_27 g26_26 g26_27 g_prop
+XCHAIN_P45_INV p26_26 p27_27 p26_27_inv nand2
+XCHAIN_P45 p26_27_inv p26_27 inverter_4
 
 * carry propagate from bit 28 to bit 29
-XCHAIN_G47 g28_28 p28_28 g29_29 g28_29 prop_g
-XCHAIN_P47_INV p28_28 p29_29 p28_29_inv nand2
-XCHAIN_P47 p28_29_inv p28_29 inverter_4
+XCHAIN_G46 g29_29 p29_29 g28_28 g28_29 g_prop
+XCHAIN_P46_INV p28_28 p29_29 p28_29_inv nand2
+XCHAIN_P46 p28_29_inv p28_29 inverter_4
 
 * carry propagate from bit 30 to bit 31
-XCHAIN_G48 g30_30 p30_30 g31_31 g30_31 prop_g
-XCHAIN_P48_INV p30_30 p31_31 p30_31_inv nand2
-XCHAIN_P48 p30_31_inv p30_31 inverter_4
+XCHAIN_G47 g31_31 p31_31 g30_30 g30_31 g_prop
+XCHAIN_P47_INV p30_30 p31_31 p30_31_inv nand2
+XCHAIN_P47 p30_31_inv p30_31 inverter_4
 
 * carry propagate from bit 0 to bit 2
-XCHAIN_G49 g0_1 p0_1 g2_2 g0_2 prop_g
-XCHAIN_P49_INV p0_1 p2_2 p0_2_inv nand2
-XCHAIN_P49 p0_2_inv p0_2 inverter_4
+XCHAIN_G48 g2_2 p2_2 g0_1 g0_2 g_prop
+XCHAIN_P48_INV p0_1 p2_2 p0_2_inv nand2
+XCHAIN_P48 p0_2_inv p0_2 inverter_4
 * create input carry bit 2
-XBUS_C49 g0_2 c2 bus
-XBUS_P49 p0_2 p2 bus
+XBUS_C48 g0_2 c2 bus
+XBUS_P48 p0_2 p2 bus
 
 * carry propagate from bit 0 to bit 3
-XCHAIN_G50 g0_1 p0_1 g2_3 g0_3 prop_g
-XCHAIN_P50_INV p0_1 p2_3 p0_3_inv nand2
-XCHAIN_P50 p0_3_inv p0_3 inverter_4
+XCHAIN_G49 g2_3 p2_3 g0_1 g0_3 g_prop
+XCHAIN_P49_INV p0_1 p2_3 p0_3_inv nand2
+XCHAIN_P49 p0_3_inv p0_3 inverter_4
 * create input carry bit 3
-XBUS_C50 g0_3 c3 bus
-XBUS_P50 p0_3 p3 bus
+XBUS_C49 g0_3 c3 bus
+XBUS_P49 p0_3 p3 bus
 
 * carry propagate from bit 4 to bit 6
-XCHAIN_G51 g4_5 p4_5 g6_6 g4_6 prop_g
-XCHAIN_P51_INV p4_5 p6_6 p4_6_inv nand2
-XCHAIN_P51 p4_6_inv p4_6 inverter_4
+XCHAIN_G50 g6_6 p6_6 g4_5 g4_6 g_prop
+XCHAIN_P50_INV p4_5 p6_6 p4_6_inv nand2
+XCHAIN_P50 p4_6_inv p4_6 inverter_4
 
 * carry propagate from bit 4 to bit 7
-XCHAIN_G52 g4_5 p4_5 g6_7 g4_7 prop_g
-XCHAIN_P52_INV p4_5 p6_7 p4_7_inv nand2
-XCHAIN_P52 p4_7_inv p4_7 inverter_4
+XCHAIN_G51 g6_7 p6_7 g4_5 g4_7 g_prop
+XCHAIN_P51_INV p4_5 p6_7 p4_7_inv nand2
+XCHAIN_P51 p4_7_inv p4_7 inverter_4
 
 * carry propagate from bit 8 to bit 10
-XCHAIN_G53 g8_9 p8_9 g10_10 g8_10 prop_g
-XCHAIN_P53_INV p8_9 p10_10 p8_10_inv nand2
-XCHAIN_P53 p8_10_inv p8_10 inverter_4
+XCHAIN_G52 g10_10 p10_10 g8_9 g8_10 g_prop
+XCHAIN_P52_INV p8_9 p10_10 p8_10_inv nand2
+XCHAIN_P52 p8_10_inv p8_10 inverter_4
 
 * carry propagate from bit 8 to bit 11
-XCHAIN_G54 g8_9 p8_9 g10_11 g8_11 prop_g
-XCHAIN_P54_INV p8_9 p10_11 p8_11_inv nand2
-XCHAIN_P54 p8_11_inv p8_11 inverter_4
+XCHAIN_G53 g10_11 p10_11 g8_9 g8_11 g_prop
+XCHAIN_P53_INV p8_9 p10_11 p8_11_inv nand2
+XCHAIN_P53 p8_11_inv p8_11 inverter_4
 
 * carry propagate from bit 12 to bit 14
-XCHAIN_G55 g12_13 p12_13 g14_14 g12_14 prop_g
-XCHAIN_P55_INV p12_13 p14_14 p12_14_inv nand2
-XCHAIN_P55 p12_14_inv p12_14 inverter_4
+XCHAIN_G54 g14_14 p14_14 g12_13 g12_14 g_prop
+XCHAIN_P54_INV p12_13 p14_14 p12_14_inv nand2
+XCHAIN_P54 p12_14_inv p12_14 inverter_4
 
 * carry propagate from bit 12 to bit 15
-XCHAIN_G56 g12_13 p12_13 g14_15 g12_15 prop_g
-XCHAIN_P56_INV p12_13 p14_15 p12_15_inv nand2
-XCHAIN_P56 p12_15_inv p12_15 inverter_4
+XCHAIN_G55 g14_15 p14_15 g12_13 g12_15 g_prop
+XCHAIN_P55_INV p12_13 p14_15 p12_15_inv nand2
+XCHAIN_P55 p12_15_inv p12_15 inverter_4
 
 * carry propagate from bit 16 to bit 18
-XCHAIN_G57 g16_17 p16_17 g18_18 g16_18 prop_g
-XCHAIN_P57_INV p16_17 p18_18 p16_18_inv nand2
-XCHAIN_P57 p16_18_inv p16_18 inverter_4
+XCHAIN_G56 g18_18 p18_18 g16_17 g16_18 g_prop
+XCHAIN_P56_INV p16_17 p18_18 p16_18_inv nand2
+XCHAIN_P56 p16_18_inv p16_18 inverter_4
 
 * carry propagate from bit 16 to bit 19
-XCHAIN_G58 g16_17 p16_17 g18_19 g16_19 prop_g
-XCHAIN_P58_INV p16_17 p18_19 p16_19_inv nand2
-XCHAIN_P58 p16_19_inv p16_19 inverter_4
+XCHAIN_G57 g18_19 p18_19 g16_17 g16_19 g_prop
+XCHAIN_P57_INV p16_17 p18_19 p16_19_inv nand2
+XCHAIN_P57 p16_19_inv p16_19 inverter_4
 
 * carry propagate from bit 20 to bit 22
-XCHAIN_G59 g20_21 p20_21 g22_22 g20_22 prop_g
-XCHAIN_P59_INV p20_21 p22_22 p20_22_inv nand2
-XCHAIN_P59 p20_22_inv p20_22 inverter_4
+XCHAIN_G58 g22_22 p22_22 g20_21 g20_22 g_prop
+XCHAIN_P58_INV p20_21 p22_22 p20_22_inv nand2
+XCHAIN_P58 p20_22_inv p20_22 inverter_4
 
 * carry propagate from bit 20 to bit 23
-XCHAIN_G60 g20_21 p20_21 g22_23 g20_23 prop_g
-XCHAIN_P60_INV p20_21 p22_23 p20_23_inv nand2
-XCHAIN_P60 p20_23_inv p20_23 inverter_4
+XCHAIN_G59 g22_23 p22_23 g20_21 g20_23 g_prop
+XCHAIN_P59_INV p20_21 p22_23 p20_23_inv nand2
+XCHAIN_P59 p20_23_inv p20_23 inverter_4
 
 * carry propagate from bit 24 to bit 26
-XCHAIN_G61 g24_25 p24_25 g26_26 g24_26 prop_g
-XCHAIN_P61_INV p24_25 p26_26 p24_26_inv nand2
-XCHAIN_P61 p24_26_inv p24_26 inverter_4
+XCHAIN_G60 g26_26 p26_26 g24_25 g24_26 g_prop
+XCHAIN_P60_INV p24_25 p26_26 p24_26_inv nand2
+XCHAIN_P60 p24_26_inv p24_26 inverter_4
 
 * carry propagate from bit 24 to bit 27
-XCHAIN_G62 g24_25 p24_25 g26_27 g24_27 prop_g
-XCHAIN_P62_INV p24_25 p26_27 p24_27_inv nand2
-XCHAIN_P62 p24_27_inv p24_27 inverter_4
+XCHAIN_G61 g26_27 p26_27 g24_25 g24_27 g_prop
+XCHAIN_P61_INV p24_25 p26_27 p24_27_inv nand2
+XCHAIN_P61 p24_27_inv p24_27 inverter_4
 
 * carry propagate from bit 28 to bit 30
-XCHAIN_G63 g28_29 p28_29 g30_30 g28_30 prop_g
-XCHAIN_P63_INV p28_29 p30_30 p28_30_inv nand2
-XCHAIN_P63 p28_30_inv p28_30 inverter_4
+XCHAIN_G62 g30_30 p30_30 g28_29 g28_30 g_prop
+XCHAIN_P62_INV p28_29 p30_30 p28_30_inv nand2
+XCHAIN_P62 p28_30_inv p28_30 inverter_4
 
 * carry propagate from bit 28 to bit 31
-XCHAIN_G64 g28_29 p28_29 g30_31 g28_31 prop_g
-XCHAIN_P64_INV p28_29 p30_31 p28_31_inv nand2
-XCHAIN_P64 p28_31_inv p28_31 inverter_4
+XCHAIN_G63 g30_31 p30_31 g28_29 g28_31 g_prop
+XCHAIN_P63_INV p28_29 p30_31 p28_31_inv nand2
+XCHAIN_P63 p28_31_inv p28_31 inverter_4
 
 * carry propagate from bit 0 to bit 4
-XCHAIN_G65 g0_3 p0_3 g4_4 g0_4 prop_g
-XCHAIN_P65_INV p0_3 p4_4 p0_4_inv nand2
-XCHAIN_P65 p0_4_inv p0_4 inverter_4
+XCHAIN_G64 g4_4 p4_4 g0_3 g0_4 g_prop
+XCHAIN_P64_INV p0_3 p4_4 p0_4_inv nand2
+XCHAIN_P64 p0_4_inv p0_4 inverter_4
 * create input carry bit 4
-XBUS_C65 g0_4 c4 bus
-XBUS_P65 p0_4 p4 bus
+XBUS_C64 g0_4 c4 bus
+XBUS_P64 p0_4 p4 bus
 
 * carry propagate from bit 0 to bit 5
-XCHAIN_G66 g0_3 p0_3 g4_5 g0_5 prop_g
-XCHAIN_P66_INV p0_3 p4_5 p0_5_inv nand2
-XCHAIN_P66 p0_5_inv p0_5 inverter_4
+XCHAIN_G65 g4_5 p4_5 g0_3 g0_5 g_prop
+XCHAIN_P65_INV p0_3 p4_5 p0_5_inv nand2
+XCHAIN_P65 p0_5_inv p0_5 inverter_4
 * create input carry bit 5
-XBUS_C66 g0_5 c5 bus
-XBUS_P66 p0_5 p5 bus
+XBUS_C65 g0_5 c5 bus
+XBUS_P65 p0_5 p5 bus
 
 * carry propagate from bit 0 to bit 6
-XCHAIN_G67 g0_3 p0_3 g4_6 g0_6 prop_g
-XCHAIN_P67_INV p0_3 p4_6 p0_6_inv nand2
-XCHAIN_P67 p0_6_inv p0_6 inverter_4
+XCHAIN_G66 g4_6 p4_6 g0_3 g0_6 g_prop
+XCHAIN_P66_INV p0_3 p4_6 p0_6_inv nand2
+XCHAIN_P66 p0_6_inv p0_6 inverter_4
 * create input carry bit 6
-XBUS_C67 g0_6 c6 bus
-XBUS_P67 p0_6 p6 bus
+XBUS_C66 g0_6 c6 bus
+XBUS_P66 p0_6 p6 bus
 
 * carry propagate from bit 0 to bit 7
-XCHAIN_G68 g0_3 p0_3 g4_7 g0_7 prop_g
-XCHAIN_P68_INV p0_3 p4_7 p0_7_inv nand2
-XCHAIN_P68 p0_7_inv p0_7 inverter_4
+XCHAIN_G67 g4_7 p4_7 g0_3 g0_7 g_prop
+XCHAIN_P67_INV p0_3 p4_7 p0_7_inv nand2
+XCHAIN_P67 p0_7_inv p0_7 inverter_4
 * create input carry bit 7
-XBUS_C68 g0_7 c7 bus
-XBUS_P68 p0_7 p7 bus
+XBUS_C67 g0_7 c7 bus
+XBUS_P67 p0_7 p7 bus
 
 * carry propagate from bit 8 to bit 12
-XCHAIN_G69 g8_11 p8_11 g12_12 g8_12 prop_g
-XCHAIN_P69_INV p8_11 p12_12 p8_12_inv nand2
-XCHAIN_P69 p8_12_inv p8_12 inverter_4
+XCHAIN_G68 g12_12 p12_12 g8_11 g8_12 g_prop
+XCHAIN_P68_INV p8_11 p12_12 p8_12_inv nand2
+XCHAIN_P68 p8_12_inv p8_12 inverter_4
 
 * carry propagate from bit 8 to bit 13
-XCHAIN_G70 g8_11 p8_11 g12_13 g8_13 prop_g
-XCHAIN_P70_INV p8_11 p12_13 p8_13_inv nand2
-XCHAIN_P70 p8_13_inv p8_13 inverter_4
+XCHAIN_G69 g12_13 p12_13 g8_11 g8_13 g_prop
+XCHAIN_P69_INV p8_11 p12_13 p8_13_inv nand2
+XCHAIN_P69 p8_13_inv p8_13 inverter_4
 
 * carry propagate from bit 8 to bit 14
-XCHAIN_G71 g8_11 p8_11 g12_14 g8_14 prop_g
-XCHAIN_P71_INV p8_11 p12_14 p8_14_inv nand2
-XCHAIN_P71 p8_14_inv p8_14 inverter_4
+XCHAIN_G70 g12_14 p12_14 g8_11 g8_14 g_prop
+XCHAIN_P70_INV p8_11 p12_14 p8_14_inv nand2
+XCHAIN_P70 p8_14_inv p8_14 inverter_4
 
 * carry propagate from bit 8 to bit 15
-XCHAIN_G72 g8_11 p8_11 g12_15 g8_15 prop_g
-XCHAIN_P72_INV p8_11 p12_15 p8_15_inv nand2
-XCHAIN_P72 p8_15_inv p8_15 inverter_4
+XCHAIN_G71 g12_15 p12_15 g8_11 g8_15 g_prop
+XCHAIN_P71_INV p8_11 p12_15 p8_15_inv nand2
+XCHAIN_P71 p8_15_inv p8_15 inverter_4
 
 * carry propagate from bit 16 to bit 20
-XCHAIN_G73 g16_19 p16_19 g20_20 g16_20 prop_g
-XCHAIN_P73_INV p16_19 p20_20 p16_20_inv nand2
-XCHAIN_P73 p16_20_inv p16_20 inverter_4
+XCHAIN_G72 g20_20 p20_20 g16_19 g16_20 g_prop
+XCHAIN_P72_INV p16_19 p20_20 p16_20_inv nand2
+XCHAIN_P72 p16_20_inv p16_20 inverter_4
 
 * carry propagate from bit 16 to bit 21
-XCHAIN_G74 g16_19 p16_19 g20_21 g16_21 prop_g
-XCHAIN_P74_INV p16_19 p20_21 p16_21_inv nand2
-XCHAIN_P74 p16_21_inv p16_21 inverter_4
+XCHAIN_G73 g20_21 p20_21 g16_19 g16_21 g_prop
+XCHAIN_P73_INV p16_19 p20_21 p16_21_inv nand2
+XCHAIN_P73 p16_21_inv p16_21 inverter_4
 
 * carry propagate from bit 16 to bit 22
-XCHAIN_G75 g16_19 p16_19 g20_22 g16_22 prop_g
-XCHAIN_P75_INV p16_19 p20_22 p16_22_inv nand2
-XCHAIN_P75 p16_22_inv p16_22 inverter_4
+XCHAIN_G74 g20_22 p20_22 g16_19 g16_22 g_prop
+XCHAIN_P74_INV p16_19 p20_22 p16_22_inv nand2
+XCHAIN_P74 p16_22_inv p16_22 inverter_4
 
 * carry propagate from bit 16 to bit 23
-XCHAIN_G76 g16_19 p16_19 g20_23 g16_23 prop_g
-XCHAIN_P76_INV p16_19 p20_23 p16_23_inv nand2
-XCHAIN_P76 p16_23_inv p16_23 inverter_4
+XCHAIN_G75 g20_23 p20_23 g16_19 g16_23 g_prop
+XCHAIN_P75_INV p16_19 p20_23 p16_23_inv nand2
+XCHAIN_P75 p16_23_inv p16_23 inverter_4
 
 * carry propagate from bit 24 to bit 28
-XCHAIN_G77 g24_27 p24_27 g28_28 g24_28 prop_g
-XCHAIN_P77_INV p24_27 p28_28 p24_28_inv nand2
-XCHAIN_P77 p24_28_inv p24_28 inverter_4
+XCHAIN_G76 g28_28 p28_28 g24_27 g24_28 g_prop
+XCHAIN_P76_INV p24_27 p28_28 p24_28_inv nand2
+XCHAIN_P76 p24_28_inv p24_28 inverter_4
 
 * carry propagate from bit 24 to bit 29
-XCHAIN_G78 g24_27 p24_27 g28_29 g24_29 prop_g
-XCHAIN_P78_INV p24_27 p28_29 p24_29_inv nand2
-XCHAIN_P78 p24_29_inv p24_29 inverter_4
+XCHAIN_G77 g28_29 p28_29 g24_27 g24_29 g_prop
+XCHAIN_P77_INV p24_27 p28_29 p24_29_inv nand2
+XCHAIN_P77 p24_29_inv p24_29 inverter_4
 
 * carry propagate from bit 24 to bit 30
-XCHAIN_G79 g24_27 p24_27 g28_30 g24_30 prop_g
-XCHAIN_P79_INV p24_27 p28_30 p24_30_inv nand2
-XCHAIN_P79 p24_30_inv p24_30 inverter_4
+XCHAIN_G78 g28_30 p28_30 g24_27 g24_30 g_prop
+XCHAIN_P78_INV p24_27 p28_30 p24_30_inv nand2
+XCHAIN_P78 p24_30_inv p24_30 inverter_4
 
 * carry propagate from bit 24 to bit 31
-XCHAIN_G80 g24_27 p24_27 g28_31 g24_31 prop_g
-XCHAIN_P80_INV p24_27 p28_31 p24_31_inv nand2
-XCHAIN_P80 p24_31_inv p24_31 inverter_4
+XCHAIN_G79 g28_31 p28_31 g24_27 g24_31 g_prop
+XCHAIN_P79_INV p24_27 p28_31 p24_31_inv nand2
+XCHAIN_P79 p24_31_inv p24_31 inverter_4
 
 * carry propagate from bit 0 to bit 8
-XCHAIN_G81 g0_7 p0_7 g8_8 g0_8 prop_g
-XCHAIN_P81_INV p0_7 p8_8 p0_8_inv nand2
-XCHAIN_P81 p0_8_inv p0_8 inverter_4
+XCHAIN_G80 g8_8 p8_8 g0_7 g0_8 g_prop
+XCHAIN_P80_INV p0_7 p8_8 p0_8_inv nand2
+XCHAIN_P80 p0_8_inv p0_8 inverter_4
 * create input carry bit 8
-XBUS_C81 g0_8 c8 bus
-XBUS_P81 p0_8 p8 bus
+XBUS_C80 g0_8 c8 bus
+XBUS_P80 p0_8 p8 bus
 
 * carry propagate from bit 0 to bit 9
-XCHAIN_G82 g0_7 p0_7 g8_9 g0_9 prop_g
-XCHAIN_P82_INV p0_7 p8_9 p0_9_inv nand2
-XCHAIN_P82 p0_9_inv p0_9 inverter_4
+XCHAIN_G81 g8_9 p8_9 g0_7 g0_9 g_prop
+XCHAIN_P81_INV p0_7 p8_9 p0_9_inv nand2
+XCHAIN_P81 p0_9_inv p0_9 inverter_4
 * create input carry bit 9
-XBUS_C82 g0_9 c9 bus
-XBUS_P82 p0_9 p9 bus
+XBUS_C81 g0_9 c9 bus
+XBUS_P81 p0_9 p9 bus
 
 * carry propagate from bit 0 to bit 10
-XCHAIN_G83 g0_7 p0_7 g8_10 g0_10 prop_g
-XCHAIN_P83_INV p0_7 p8_10 p0_10_inv nand2
-XCHAIN_P83 p0_10_inv p0_10 inverter_4
+XCHAIN_G82 g8_10 p8_10 g0_7 g0_10 g_prop
+XCHAIN_P82_INV p0_7 p8_10 p0_10_inv nand2
+XCHAIN_P82 p0_10_inv p0_10 inverter_4
 * create input carry bit 10
-XBUS_C83 g0_10 c10 bus
-XBUS_P83 p0_10 p10 bus
+XBUS_C82 g0_10 c10 bus
+XBUS_P82 p0_10 p10 bus
 
 * carry propagate from bit 0 to bit 11
-XCHAIN_G84 g0_7 p0_7 g8_11 g0_11 prop_g
-XCHAIN_P84_INV p0_7 p8_11 p0_11_inv nand2
-XCHAIN_P84 p0_11_inv p0_11 inverter_4
+XCHAIN_G83 g8_11 p8_11 g0_7 g0_11 g_prop
+XCHAIN_P83_INV p0_7 p8_11 p0_11_inv nand2
+XCHAIN_P83 p0_11_inv p0_11 inverter_4
 * create input carry bit 11
-XBUS_C84 g0_11 c11 bus
-XBUS_P84 p0_11 p11 bus
+XBUS_C83 g0_11 c11 bus
+XBUS_P83 p0_11 p11 bus
 
 * carry propagate from bit 0 to bit 12
-XCHAIN_G85 g0_7 p0_7 g8_12 g0_12 prop_g
-XCHAIN_P85_INV p0_7 p8_12 p0_12_inv nand2
-XCHAIN_P85 p0_12_inv p0_12 inverter_4
+XCHAIN_G84 g8_12 p8_12 g0_7 g0_12 g_prop
+XCHAIN_P84_INV p0_7 p8_12 p0_12_inv nand2
+XCHAIN_P84 p0_12_inv p0_12 inverter_4
 * create input carry bit 12
-XBUS_C85 g0_12 c12 bus
-XBUS_P85 p0_12 p12 bus
+XBUS_C84 g0_12 c12 bus
+XBUS_P84 p0_12 p12 bus
 
 * carry propagate from bit 0 to bit 13
-XCHAIN_G86 g0_7 p0_7 g8_13 g0_13 prop_g
-XCHAIN_P86_INV p0_7 p8_13 p0_13_inv nand2
-XCHAIN_P86 p0_13_inv p0_13 inverter_4
+XCHAIN_G85 g8_13 p8_13 g0_7 g0_13 g_prop
+XCHAIN_P85_INV p0_7 p8_13 p0_13_inv nand2
+XCHAIN_P85 p0_13_inv p0_13 inverter_4
 * create input carry bit 13
-XBUS_C86 g0_13 c13 bus
-XBUS_P86 p0_13 p13 bus
+XBUS_C85 g0_13 c13 bus
+XBUS_P85 p0_13 p13 bus
 
 * carry propagate from bit 0 to bit 14
-XCHAIN_G87 g0_7 p0_7 g8_14 g0_14 prop_g
-XCHAIN_P87_INV p0_7 p8_14 p0_14_inv nand2
-XCHAIN_P87 p0_14_inv p0_14 inverter_4
+XCHAIN_G86 g8_14 p8_14 g0_7 g0_14 g_prop
+XCHAIN_P86_INV p0_7 p8_14 p0_14_inv nand2
+XCHAIN_P86 p0_14_inv p0_14 inverter_4
 * create input carry bit 14
-XBUS_C87 g0_14 c14 bus
-XBUS_P87 p0_14 p14 bus
+XBUS_C86 g0_14 c14 bus
+XBUS_P86 p0_14 p14 bus
 
 * carry propagate from bit 0 to bit 15
-XCHAIN_G88 g0_7 p0_7 g8_15 g0_15 prop_g
-XCHAIN_P88_INV p0_7 p8_15 p0_15_inv nand2
-XCHAIN_P88 p0_15_inv p0_15 inverter_4
+XCHAIN_G87 g8_15 p8_15 g0_7 g0_15 g_prop
+XCHAIN_P87_INV p0_7 p8_15 p0_15_inv nand2
+XCHAIN_P87 p0_15_inv p0_15 inverter_4
 * create input carry bit 15
-XBUS_C88 g0_15 c15 bus
-XBUS_P88 p0_15 p15 bus
+XBUS_C87 g0_15 c15 bus
+XBUS_P87 p0_15 p15 bus
 
 * carry propagate from bit 16 to bit 24
-XCHAIN_G89 g16_23 p16_23 g24_24 g16_24 prop_g
-XCHAIN_P89_INV p16_23 p24_24 p16_24_inv nand2
-XCHAIN_P89 p16_24_inv p16_24 inverter_4
+XCHAIN_G88 g24_24 p24_24 g16_23 g16_24 g_prop
+XCHAIN_P88_INV p16_23 p24_24 p16_24_inv nand2
+XCHAIN_P88 p16_24_inv p16_24 inverter_4
 
 * carry propagate from bit 16 to bit 25
-XCHAIN_G90 g16_23 p16_23 g24_25 g16_25 prop_g
-XCHAIN_P90_INV p16_23 p24_25 p16_25_inv nand2
-XCHAIN_P90 p16_25_inv p16_25 inverter_4
+XCHAIN_G89 g24_25 p24_25 g16_23 g16_25 g_prop
+XCHAIN_P89_INV p16_23 p24_25 p16_25_inv nand2
+XCHAIN_P89 p16_25_inv p16_25 inverter_4
 
 * carry propagate from bit 16 to bit 26
-XCHAIN_G91 g16_23 p16_23 g24_26 g16_26 prop_g
-XCHAIN_P91_INV p16_23 p24_26 p16_26_inv nand2
-XCHAIN_P91 p16_26_inv p16_26 inverter_4
+XCHAIN_G90 g24_26 p24_26 g16_23 g16_26 g_prop
+XCHAIN_P90_INV p16_23 p24_26 p16_26_inv nand2
+XCHAIN_P90 p16_26_inv p16_26 inverter_4
 
 * carry propagate from bit 16 to bit 27
-XCHAIN_G92 g16_23 p16_23 g24_27 g16_27 prop_g
-XCHAIN_P92_INV p16_23 p24_27 p16_27_inv nand2
-XCHAIN_P92 p16_27_inv p16_27 inverter_4
+XCHAIN_G91 g24_27 p24_27 g16_23 g16_27 g_prop
+XCHAIN_P91_INV p16_23 p24_27 p16_27_inv nand2
+XCHAIN_P91 p16_27_inv p16_27 inverter_4
 
 * carry propagate from bit 16 to bit 28
-XCHAIN_G93 g16_23 p16_23 g24_28 g16_28 prop_g
-XCHAIN_P93_INV p16_23 p24_28 p16_28_inv nand2
-XCHAIN_P93 p16_28_inv p16_28 inverter_4
+XCHAIN_G92 g24_28 p24_28 g16_23 g16_28 g_prop
+XCHAIN_P92_INV p16_23 p24_28 p16_28_inv nand2
+XCHAIN_P92 p16_28_inv p16_28 inverter_4
 
 * carry propagate from bit 16 to bit 29
-XCHAIN_G94 g16_23 p16_23 g24_29 g16_29 prop_g
-XCHAIN_P94_INV p16_23 p24_29 p16_29_inv nand2
-XCHAIN_P94 p16_29_inv p16_29 inverter_4
+XCHAIN_G93 g24_29 p24_29 g16_23 g16_29 g_prop
+XCHAIN_P93_INV p16_23 p24_29 p16_29_inv nand2
+XCHAIN_P93 p16_29_inv p16_29 inverter_4
 
 * carry propagate from bit 16 to bit 30
-XCHAIN_G95 g16_23 p16_23 g24_30 g16_30 prop_g
-XCHAIN_P95_INV p16_23 p24_30 p16_30_inv nand2
-XCHAIN_P95 p16_30_inv p16_30 inverter_4
+XCHAIN_G94 g24_30 p24_30 g16_23 g16_30 g_prop
+XCHAIN_P94_INV p16_23 p24_30 p16_30_inv nand2
+XCHAIN_P94 p16_30_inv p16_30 inverter_4
 
 * carry propagate from bit 16 to bit 31
-XCHAIN_G96 g16_23 p16_23 g24_31 g16_31 prop_g
-XCHAIN_P96_INV p16_23 p24_31 p16_31_inv nand2
-XCHAIN_P96 p16_31_inv p16_31 inverter_4
+XCHAIN_G95 g24_31 p24_31 g16_23 g16_31 g_prop
+XCHAIN_P95_INV p16_23 p24_31 p16_31_inv nand2
+XCHAIN_P95 p16_31_inv p16_31 inverter_4
 
 * carry propagate from bit 0 to bit 16
-XCHAIN_G97 g0_15 p0_15 g16_16 g0_16 prop_g
-XCHAIN_P97_INV p0_15 p16_16 p0_16_inv nand2
-XCHAIN_P97 p0_16_inv p0_16 inverter_4
+XCHAIN_G96 g16_16 p16_16 g0_15 g0_16 g_prop
+XCHAIN_P96_INV p0_15 p16_16 p0_16_inv nand2
+XCHAIN_P96 p0_16_inv p0_16 inverter_4
 * create input carry bit 16
-XBUS_C97 g0_16 c16 bus
-XBUS_P97 p0_16 p16 bus
+XBUS_C96 g0_16 c16 bus
+XBUS_P96 p0_16 p16 bus
 
 * carry propagate from bit 0 to bit 17
-XCHAIN_G98 g0_15 p0_15 g16_17 g0_17 prop_g
-XCHAIN_P98_INV p0_15 p16_17 p0_17_inv nand2
-XCHAIN_P98 p0_17_inv p0_17 inverter_4
+XCHAIN_G97 g16_17 p16_17 g0_15 g0_17 g_prop
+XCHAIN_P97_INV p0_15 p16_17 p0_17_inv nand2
+XCHAIN_P97 p0_17_inv p0_17 inverter_4
 * create input carry bit 17
-XBUS_C98 g0_17 c17 bus
-XBUS_P98 p0_17 p17 bus
+XBUS_C97 g0_17 c17 bus
+XBUS_P97 p0_17 p17 bus
 
 * carry propagate from bit 0 to bit 18
-XCHAIN_G99 g0_15 p0_15 g16_18 g0_18 prop_g
-XCHAIN_P99_INV p0_15 p16_18 p0_18_inv nand2
-XCHAIN_P99 p0_18_inv p0_18 inverter_4
+XCHAIN_G98 g16_18 p16_18 g0_15 g0_18 g_prop
+XCHAIN_P98_INV p0_15 p16_18 p0_18_inv nand2
+XCHAIN_P98 p0_18_inv p0_18 inverter_4
 * create input carry bit 18
-XBUS_C99 g0_18 c18 bus
-XBUS_P99 p0_18 p18 bus
+XBUS_C98 g0_18 c18 bus
+XBUS_P98 p0_18 p18 bus
 
 * carry propagate from bit 0 to bit 19
-XCHAIN_G100 g0_15 p0_15 g16_19 g0_19 prop_g
-XCHAIN_P100_INV p0_15 p16_19 p0_19_inv nand2
-XCHAIN_P100 p0_19_inv p0_19 inverter_4
+XCHAIN_G99 g16_19 p16_19 g0_15 g0_19 g_prop
+XCHAIN_P99_INV p0_15 p16_19 p0_19_inv nand2
+XCHAIN_P99 p0_19_inv p0_19 inverter_4
 * create input carry bit 19
-XBUS_C100 g0_19 c19 bus
-XBUS_P100 p0_19 p19 bus
+XBUS_C99 g0_19 c19 bus
+XBUS_P99 p0_19 p19 bus
 
 * carry propagate from bit 0 to bit 20
-XCHAIN_G101 g0_15 p0_15 g16_20 g0_20 prop_g
-XCHAIN_P101_INV p0_15 p16_20 p0_20_inv nand2
-XCHAIN_P101 p0_20_inv p0_20 inverter_4
+XCHAIN_G100 g16_20 p16_20 g0_15 g0_20 g_prop
+XCHAIN_P100_INV p0_15 p16_20 p0_20_inv nand2
+XCHAIN_P100 p0_20_inv p0_20 inverter_4
 * create input carry bit 20
-XBUS_C101 g0_20 c20 bus
-XBUS_P101 p0_20 p20 bus
+XBUS_C100 g0_20 c20 bus
+XBUS_P100 p0_20 p20 bus
 
 * carry propagate from bit 0 to bit 21
-XCHAIN_G102 g0_15 p0_15 g16_21 g0_21 prop_g
-XCHAIN_P102_INV p0_15 p16_21 p0_21_inv nand2
-XCHAIN_P102 p0_21_inv p0_21 inverter_4
+XCHAIN_G101 g16_21 p16_21 g0_15 g0_21 g_prop
+XCHAIN_P101_INV p0_15 p16_21 p0_21_inv nand2
+XCHAIN_P101 p0_21_inv p0_21 inverter_4
 * create input carry bit 21
-XBUS_C102 g0_21 c21 bus
-XBUS_P102 p0_21 p21 bus
+XBUS_C101 g0_21 c21 bus
+XBUS_P101 p0_21 p21 bus
 
 * carry propagate from bit 0 to bit 22
-XCHAIN_G103 g0_15 p0_15 g16_22 g0_22 prop_g
-XCHAIN_P103_INV p0_15 p16_22 p0_22_inv nand2
-XCHAIN_P103 p0_22_inv p0_22 inverter_4
+XCHAIN_G102 g16_22 p16_22 g0_15 g0_22 g_prop
+XCHAIN_P102_INV p0_15 p16_22 p0_22_inv nand2
+XCHAIN_P102 p0_22_inv p0_22 inverter_4
 * create input carry bit 22
-XBUS_C103 g0_22 c22 bus
-XBUS_P103 p0_22 p22 bus
+XBUS_C102 g0_22 c22 bus
+XBUS_P102 p0_22 p22 bus
 
 * carry propagate from bit 0 to bit 23
-XCHAIN_G104 g0_15 p0_15 g16_23 g0_23 prop_g
-XCHAIN_P104_INV p0_15 p16_23 p0_23_inv nand2
-XCHAIN_P104 p0_23_inv p0_23 inverter_4
+XCHAIN_G103 g16_23 p16_23 g0_15 g0_23 g_prop
+XCHAIN_P103_INV p0_15 p16_23 p0_23_inv nand2
+XCHAIN_P103 p0_23_inv p0_23 inverter_4
 * create input carry bit 23
-XBUS_C104 g0_23 c23 bus
-XBUS_P104 p0_23 p23 bus
+XBUS_C103 g0_23 c23 bus
+XBUS_P103 p0_23 p23 bus
 
 * carry propagate from bit 0 to bit 24
-XCHAIN_G105 g0_15 p0_15 g16_24 g0_24 prop_g
-XCHAIN_P105_INV p0_15 p16_24 p0_24_inv nand2
-XCHAIN_P105 p0_24_inv p0_24 inverter_4
+XCHAIN_G104 g16_24 p16_24 g0_15 g0_24 g_prop
+XCHAIN_P104_INV p0_15 p16_24 p0_24_inv nand2
+XCHAIN_P104 p0_24_inv p0_24 inverter_4
 * create input carry bit 24
-XBUS_C105 g0_24 c24 bus
-XBUS_P105 p0_24 p24 bus
+XBUS_C104 g0_24 c24 bus
+XBUS_P104 p0_24 p24 bus
 
 * carry propagate from bit 0 to bit 25
-XCHAIN_G106 g0_15 p0_15 g16_25 g0_25 prop_g
-XCHAIN_P106_INV p0_15 p16_25 p0_25_inv nand2
-XCHAIN_P106 p0_25_inv p0_25 inverter_4
+XCHAIN_G105 g16_25 p16_25 g0_15 g0_25 g_prop
+XCHAIN_P105_INV p0_15 p16_25 p0_25_inv nand2
+XCHAIN_P105 p0_25_inv p0_25 inverter_4
 * create input carry bit 25
-XBUS_C106 g0_25 c25 bus
-XBUS_P106 p0_25 p25 bus
+XBUS_C105 g0_25 c25 bus
+XBUS_P105 p0_25 p25 bus
 
 * carry propagate from bit 0 to bit 26
-XCHAIN_G107 g0_15 p0_15 g16_26 g0_26 prop_g
-XCHAIN_P107_INV p0_15 p16_26 p0_26_inv nand2
-XCHAIN_P107 p0_26_inv p0_26 inverter_4
+XCHAIN_G106 g16_26 p16_26 g0_15 g0_26 g_prop
+XCHAIN_P106_INV p0_15 p16_26 p0_26_inv nand2
+XCHAIN_P106 p0_26_inv p0_26 inverter_4
 * create input carry bit 26
-XBUS_C107 g0_26 c26 bus
-XBUS_P107 p0_26 p26 bus
+XBUS_C106 g0_26 c26 bus
+XBUS_P106 p0_26 p26 bus
 
 * carry propagate from bit 0 to bit 27
-XCHAIN_G108 g0_15 p0_15 g16_27 g0_27 prop_g
-XCHAIN_P108_INV p0_15 p16_27 p0_27_inv nand2
-XCHAIN_P108 p0_27_inv p0_27 inverter_4
+XCHAIN_G107 g16_27 p16_27 g0_15 g0_27 g_prop
+XCHAIN_P107_INV p0_15 p16_27 p0_27_inv nand2
+XCHAIN_P107 p0_27_inv p0_27 inverter_4
 * create input carry bit 27
-XBUS_C108 g0_27 c27 bus
-XBUS_P108 p0_27 p27 bus
+XBUS_C107 g0_27 c27 bus
+XBUS_P107 p0_27 p27 bus
 
 * carry propagate from bit 0 to bit 28
-XCHAIN_G109 g0_15 p0_15 g16_28 g0_28 prop_g
-XCHAIN_P109_INV p0_15 p16_28 p0_28_inv nand2
-XCHAIN_P109 p0_28_inv p0_28 inverter_4
+XCHAIN_G108 g16_28 p16_28 g0_15 g0_28 g_prop
+XCHAIN_P108_INV p0_15 p16_28 p0_28_inv nand2
+XCHAIN_P108 p0_28_inv p0_28 inverter_4
 * create input carry bit 28
-XBUS_C109 g0_28 c28 bus
-XBUS_P109 p0_28 p28 bus
+XBUS_C108 g0_28 c28 bus
+XBUS_P108 p0_28 p28 bus
 
 * carry propagate from bit 0 to bit 29
-XCHAIN_G110 g0_15 p0_15 g16_29 g0_29 prop_g
-XCHAIN_P110_INV p0_15 p16_29 p0_29_inv nand2
-XCHAIN_P110 p0_29_inv p0_29 inverter_4
+XCHAIN_G109 g16_29 p16_29 g0_15 g0_29 g_prop
+XCHAIN_P109_INV p0_15 p16_29 p0_29_inv nand2
+XCHAIN_P109 p0_29_inv p0_29 inverter_4
 * create input carry bit 29
-XBUS_C110 g0_29 c29 bus
-XBUS_P110 p0_29 p29 bus
+XBUS_C109 g0_29 c29 bus
+XBUS_P109 p0_29 p29 bus
 
 * carry propagate from bit 0 to bit 30
-XCHAIN_G111 g0_15 p0_15 g16_30 g0_30 prop_g
-XCHAIN_P111_INV p0_15 p16_30 p0_30_inv nand2
-XCHAIN_P111 p0_30_inv p0_30 inverter_4
+XCHAIN_G110 g16_30 p16_30 g0_15 g0_30 g_prop
+XCHAIN_P110_INV p0_15 p16_30 p0_30_inv nand2
+XCHAIN_P110 p0_30_inv p0_30 inverter_4
 * create input carry bit 30
-XBUS_C111 g0_30 c30 bus
-XBUS_P111 p0_30 p30 bus
+XBUS_C110 g0_30 c30 bus
+XBUS_P110 p0_30 p30 bus
 
 * carry propagate from bit 0 to bit 31
-XCHAIN_G112 g0_15 p0_15 g16_31 g0_31 prop_g
-XCHAIN_P112_INV p0_15 p16_31 p0_31_inv nand2
-XCHAIN_P112 p0_31_inv p0_31 inverter_4
+XCHAIN_G111 g16_31 p16_31 g0_15 g0_31 g_prop
+XCHAIN_P111_INV p0_15 p16_31 p0_31_inv nand2
+XCHAIN_P111 p0_31_inv p0_31 inverter_4
 * create input carry bit 31
-XBUS_C112 g0_31 c31 bus
-XBUS_P112 p0_31 p31 bus
+XBUS_C111 g0_31 c31 bus
+XBUS_P111 p0_31 p31 bus
 
 
-XKHA0 a0 b0 c0 s0 xor3
-XKHA1 p1 c0 s1 xor2
-XKHA2 p2 c1 s2 xor2
-XKHA3 p3 c2 s3 xor2
-XKHA4 p4 c3 s4 xor2
-XKHA5 p5 c4 s5 xor2
-XKHA6 p6 c5 s6 xor2
-XKHA7 p7 c6 s7 xor2
-XKHA8 p8 c7 s8 xor2
-XKHA9 p9 c8 s9 xor2
-XKHA10 p10 c9 s10 xor2
-XKHA11 p11 c10 s11 xor2
-XKHA12 p12 c11 s12 xor2
-XKHA13 p13 c12 s13 xor2
-XKHA14 p14 c13 s14 xor2
-XKHA15 p15 c14 s15 xor2
-XKHA16 p16 c15 s16 xor2
-XKHA17 p17 c16 s17 xor2
-XKHA18 p18 c17 s18 xor2
-XKHA19 p19 c18 s19 xor2
-XKHA20 p20 c19 s20 xor2
-XKHA21 p21 c20 s21 xor2
-XKHA22 p22 c21 s22 xor2
-XKHA23 p23 c22 s23 xor2
-XKHA24 p24 c23 s24 xor2
-XKHA25 p25 c24 s25 xor2
-XKHA26 p26 c25 s26 xor2
-XKHA27 p27 c26 s27 xor2
-XKHA28 p28 c27 s28 xor2
-XKHA29 p29 c28 s29 xor2
-XKHA30 p30 c29 s30 xor2
-XKHA31 p31 c30 s31 xor2
+XKHA0 p0 s0 bus
+XKHA sp[31:1] c[30:0] s[31:1] xor2
 
-XZAND_L10 s0 s1 s2 s3 za0 and4
-XZAND_L11 s4 s5 s6 s7 za1 and4
-XZAND_L12 s8 s9 s10 s11 za2 and4
-XZAND_L13 s12 s13 s14 s15 za3 and4
-XZAND_L14 s16 s17 s18 s19 za4 and4
-XZAND_L15 s20 s21 s22 s23 za5 and4
-XZAND_L16 s24 s25 s26 s27 za6 and4
-XZAND_L17 s28 s29 s30 s31 za7 and4
-XZAND_L20 za[0] za[1] za[2] za[3] z0_to_15 and4
-XZAND_L21 za[0] za[1] za[2] za[3] z16_to_31 and4
-XZAND_L30 z0_to_15 z16_to_31 z and2
+* nor outputs 1 if inputs are all 0
+XZNOR_L10 s0 s1 s2 s3 za0 nor4
+XZNOR_L11 s4 s5 s6 s7 za1 nor4
+XZNOR_L12 s8 s9 s10 s11 za2 nor4
+XZNOR_L13 s12 s13 s14 s15 za3 nor4
+XZNOR_L14 s16 s17 s18 s19 za4 nor4
+XZNOR_L15 s20 s21 s22 s23 za5 nor4
+XZNOR_L16 s24 s25 s26 s27 za6 nor4
+XZNOR_L17 s28 s29 s30 s31 za7 nor4
+XZAND_L20 za[0] za[1] za[2] za[3] z0_to_15 nand4
+XZAND_L21 za[4] za[5] za[6] za[7] z16_to_31 nand4
+XZAND_L30 z0_to_15 z16_to_31 z nor2
 
 .ends
