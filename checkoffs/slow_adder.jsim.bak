@@ -1,0 +1,155 @@
+
+.include "nominal.jsim"
+.include "stdcell.jsim"
+.include "2dcheckoff_100ns.jsim"
+
+* FA: 1-bit Full Adder circuit
+* Input: a, b, ci 
+* Output: s, co
+.subckt FA a b ci s co
+* write your FA circuitry here
+* BEGIN ANSWER
+
+XAND7 b ci 7 and2
+XAND9 a 7 9 and2
+XINV11 b 11 inv
+XINV13 a 13 inv
+XAND15 13 ci 15 and2
+XAND17 11 15 17 and2
+XOR18 9 17 18 or2
+XINV20 a 20 inv
+XINV23 ci 23 inv
+XAND24 b 23 24 and2
+XAND26 20 24 26 and2
+XINV30 b 30 inv
+XINV31 ci 31 inv
+XAND32 30 31 32 and2
+XAND34 a 32 34 and2
+XOR35 26 34 35 or2
+XOR36 18 35 s or2
+
+XAND104 b ci 102 and2
+XAND108 a ci 108 and2
+XAND112 a b 112 and2
+XOR113 108 112 113 or2
+XOR114 102 113 co or2
+
+*END ANSWER
+.ends
+
+**********************************
+**** Adder32 circuit *************
+.subckt adder32 ALUFN[0] a[31:0] b[31:0] s[31:0] z v n
+* BEGIN ANSWER
+
+X0 ALUFN0 b0 tb0 xor2
+XFA0 tb0 a0 ALUFN0 s0 co0 FA
+X1 ALUFN0 b1 tb1 xor2
+XFA1 tb1 a1 co0 s1 co1 FA
+X2 ALUFN0 b2 tb2 xor2
+XFA2 tb2 a2 co1 s2 co2 FA
+X3 ALUFN0 b3 tb3 xor2
+XFA3 tb3 a3 co2 s3 co3 FA
+X4 ALUFN0 b4 tb4 xor2
+XFA4 tb4 a4 co3 s4 co4 FA
+X5 ALUFN0 b5 tb5 xor2
+XFA5 tb5 a5 co4 s5 co5 FA
+X6 ALUFN0 b6 tb6 xor2
+XFA6 tb6 a6 co5 s6 co6 FA
+X7 ALUFN0 b7 tb7 xor2
+XFA7 tb7 a7 co6 s7 co7 FA
+X8 ALUFN0 b8 tb8 xor2
+XFA8 tb8 a8 co7 s8 co8 FA
+X9 ALUFN0 b9 tb9 xor2
+XFA9 tb9 a9 co8 s9 co9 FA
+X10 ALUFN0 b10 tb10 xor2
+XFA10 tb10 a10 co9 s10 co10 FA
+X11 ALUFN0 b11 tb11 xor2
+XFA11 tb11 a11 co10 s11 co11 FA
+X12 ALUFN0 b12 tb12 xor2
+XFA12 tb12 a12 co11 s12 co12 FA
+X13 ALUFN0 b13 tb13 xor2
+XFA13 tb13 a13 co12 s13 co13 FA
+X14 ALUFN0 b14 tb14 xor2
+XFA14 tb14 a14 co13 s14 co14 FA
+X15 ALUFN0 b15 tb15 xor2
+XFA15 tb15 a15 co14 s15 co15 FA
+X16 ALUFN0 b16 tb16 xor2
+XFA16 tb16 a16 co15 s16 co16 FA
+X17 ALUFN0 b17 tb17 xor2
+XFA17 tb17 a17 co16 s17 co17 FA
+X18 ALUFN0 b18 tb18 xor2
+XFA18 tb18 a18 co17 s18 co18 FA
+X19 ALUFN0 b19 tb19 xor2
+XFA19 tb19 a19 co18 s19 co19 FA
+X20 ALUFN0 b20 tb20 xor2
+XFA20 tb20 a20 co19 s20 co20 FA
+X21 ALUFN0 b21 tb21 xor2
+XFA21 tb21 a21 co20 s21 co21 FA
+X22 ALUFN0 b22 tb22 xor2
+XFA22 tb22 a22 co21 s22 co22 FA
+X23 ALUFN0 b23 tb23 xor2
+XFA23 tb23 a23 co22 s23 co23 FA
+X24 ALUFN0 b24 tb24 xor2
+XFA24 tb24 a24 co23 s24 co24 FA
+X25 ALUFN0 b25 tb25 xor2
+XFA25 tb25 a25 co24 s25 co25 FA
+X26 ALUFN0 b26 tb26 xor2
+XFA26 tb26 a26 co25 s26 co26 FA
+X27 ALUFN0 b27 tb27 xor2
+XFA27 tb27 a27 co26 s27 co27 FA
+X28 ALUFN0 b28 tb28 xor2
+XFA28 tb28 a28 co27 s28 co28 FA
+X29 ALUFN0 b29 tb29 xor2
+XFA29 tb29 a29 co28 s29 co29 FA
+X30 ALUFN0 b30 tb30 xor2
+XFA30 tb30 a30 co29 s30 co30 FA
+X31 ALUFN0 b31 tb31 xor2
+XFA31 tb31 a31 co30 s31 co31 FA
+
+.connect s31 n
+
+* z_expr = SumProducts('s31+s30+s29+s28+s27+s26+s25+s24+s23+s22+s21+s20+s19+s18+s17+s16+s15+s14+s13+s12+s11+s10+s9+s8+s7+s6+s5+s4+s3+s2+s1+s0')
+XOR106 s31 s30 106 or2
+XOR109 s29 s28 109 or2
+XOR111 106 109 111 or2
+XOR115 s27 s26 115 or2
+XOR118 s25 s24 118 or2
+XOR120 115 118 120 or2
+XOR122 111 120 122 or2
+XOR127 s23 s22 127 or2
+XOR130 s21 s20 130 or2
+XOR132 127 130 132 or2
+XOR136 s19 s18 136 or2
+XOR139 s17 s16 139 or2
+XOR141 136 139 141 or2
+XOR143 132 141 143 or2
+XOR145 122 143 145 or2
+XOR151 s15 s14 151 or2
+XOR154 s13 s12 154 or2
+XOR156 151 154 156 or2
+XOR160 s11 s10 160 or2
+XOR163 s9 s8 163 or2
+XOR165 160 163 165 or2
+XOR167 156 165 167 or2
+XOR172 s7 s6 172 or2
+XOR175 s5 s4 175 or2
+XOR177 172 175 177 or2
+XOR181 s3 s2 181 or2
+XOR184 s1 s0 184 or2
+XOR186 181 184 186 or2
+XOR188 177 186 188 or2
+XOR190 167 188 190 or2
+XOR191 145 190 zi or2
+XINVF zi z inverter
+
+* v = SumProducts('~a31*~b31*s31+a31*b31*~s31')
+XINV201 a31 201 inverter
+XINV203 tb31 203 inverter
+XAND205 203 s31 205 and2
+XAND207 201 205 207 and2
+XINV212 s31 212 inverter
+XAND213 tb31 212 213 and2
+XAND215 a31 213 215 and2
+XOR215 207 215 v or2
+.ends

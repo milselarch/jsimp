@@ -1,5 +1,6 @@
 import re
 
+
 class Variable(object):
     def __init__(self, name: str, inverted=False):
         assert len(name) > 0
