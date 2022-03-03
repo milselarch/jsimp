@@ -94,8 +94,9 @@ class BrentKung(object):
         fanout_counts = self.compute_fanout(num_bits=num_bits)
         jsim_lines = [
             template_code,
-            '.subckt adder32 subtract a[31:0] xb[31:0] s[31:0] z v n '
+            '.subckt adder32 subtract xa[31:0] xb[31:0] s[31:0] z v n '
             '\n* p[31:0] c[31:0]',
+            'XBUS_A xa[31:0] a[31:0] bus',
             'XSUBTRACT_BUFFER subtract subtract_buffer buffer_8',
             'XXOR_B xb[31:0] subtract_buffer#32 b[31:0] fast_xor',
             'XBUS_C0 g0_0 c0 bus',

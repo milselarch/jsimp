@@ -56,12 +56,20 @@ XXOR_PT2 xor_ab c xor_out xor2
 * g0_[n] = sg[n] + p0_[n] * g0_[n-1]
 * = ~((~gp)*~(pp*gn))
 * = NAND2(INV(gp), NAND2(pp, gn))
+* all the variants here have the same logic
+* but different fanouts at the inverter
 **********************************
 .subckt g_prop g_now p_now g_prev g_new
 XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
+XPROP_GEN g_new_inv g_new inverter
+.ends
+.subckt g_prop_i2 g_now p_now g_prev g_new
+XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
 XPROP_GEN g_new_inv g_new inverter_2
-* XPROP_GEN1 p_now g_prev prop_generate and2
-* XPROP_GEN2 g_now prop_generate g_new or2
+.ends
+.subckt g_prop_i4 g_now p_now g_prev g_new
+XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
+XPROP_GEN g_new_inv g_new inverter_4
 .ends
 **********************************
 
@@ -133,22 +141,27 @@ class CarryChain(object):
         sub_g = f'g{sub_start}_{sub_end}'
         sub_p = f'p{sub_start}_{sub_end}'
 
+        inverter = 'inverter_8'
+        g_prop = 'g_prop_i4'
+
         if fanout < 2:
             inverter = 'inverter'
-        elif fanout < 14:
+            g_prop = 'g_prop'
+        elif fanout < 12:
             inverter = 'inverter_2'
+            g_prop = 'g_prop_i2'
         elif fanout < 32:
             inverter = 'inverter_4'
-        else:
-            inverter = 'inverter_8'
+            g_prop = 'g_prop_i4'
 
-        chain_args = f'{sub_g} {sub_p} {prev_g} {combine_g}_inv'
+        chain_args = f'{sub_g} {sub_p} {prev_g} {combine_g}'
+        inv_chain_args = f'{sub_g} {sub_p} {prev_g} {combine_g}_inv'
 
         jsim_lines = [
             f'* carry propagate from bit {start} to bit {end}',
-            # f'XCHAIN_G{c} {sub_g} {sub_p} {prev_g} {combine_g} g_prop',
-            f'XCHAIN_G{c} {chain_args} g_prop_inv',
-            f'XCHAIN_G{c}_INV {combine_g}_inv {combine_g} {inverter}',
+            f'XCHAIN_G{c} {chain_args} {g_prop}',
+            # f'XCHAIN_G{c} {inv_chain_args} g_prop_inv',
+            # f'XCHAIN_G{c}_INV {combine_g}_inv {combine_g} {inverter}',
             f'XCHAIN_P{c}_INV {prev_p} {sub_p} {combine_p}_inv nand2',
             f'XCHAIN_P{c} {combine_p}_inv {combine_p} {inverter}'
         ]
