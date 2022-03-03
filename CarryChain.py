@@ -7,7 +7,7 @@ from typing import List
 template_code = textwrap.dedent("""
 .include "nominal.jsim"
 .include "stdcell.jsim"
-.include "2dcheckoff_2p1ns.jsim"
+.include "2dcheckoff_3ns.jsim"
 
 * .subckt adder32 subtract xa[31:0] b[31:0] s[31:0] z v n p[31:1]
 
