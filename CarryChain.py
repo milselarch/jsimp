@@ -59,9 +59,20 @@ XXOR_PT2 xor_ab c xor_out xor2
 **********************************
 .subckt g_prop g_now p_now g_prev g_new
 XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
-XPROP_GEN g_new_inv g_new inverter_4
+XPROP_GEN g_new_inv g_new inverter_2
 * XPROP_GEN1 p_now g_prev prop_generate and2
 * XPROP_GEN2 g_now prop_generate g_new or2
+.ends
+**********************************
+
+* (inverted) propogate carry g
+**********************************
+* g0_[n] = sg[n] + p0_[n] * g0_[n-1]
+* = ~((~gp)*~(pp*gn))
+* = NAND2(INV(gp), NAND2(pp, gn))
+**********************************
+.subckt g_prop_inv g_now p_now g_prev g_new_inv
+XPROP_GEN_INV p_now g_prev g_now g_new_inv aoi21
 .ends
 **********************************
 """)
@@ -93,7 +104,7 @@ class CarryChain(object):
     def __eq__(self, other):
         return self.to_tuple() == other.to_tuple()
 
-    def build_jsim(self, counter=1):
+    def build_jsim(self, counter=1, fanout=2):
         c, n = counter, self.end
         end, start = self.to_tuple()
         combine_g = f'g{start}_{end}'
@@ -106,8 +117,8 @@ class CarryChain(object):
                 f'* tie sg{n} to {combine_g}',
                 # f'XG{c} a{n} b{n} sg{n}_inv nand2',
                 # f'XG{c}_INV sg{n}_inv sg{n} inverter_4',
-                f'XG{c}_INV a{n} b{n} sg{n} and2',
-                f'XP{c} a{n} b{n} sp{n} xor2',
+                f'XG{c}_INV a{n} b{n} sg{n} fast_and',
+                f'XP{c} a{n} b{n} sp{n} fast_xor',
                 f'XBUS_G{c} sg{n} {combine_g} bus',
                 f'XBUS_P{c} sp{n} {combine_p} bus',
                 f''
@@ -122,11 +133,24 @@ class CarryChain(object):
         sub_g = f'g{sub_start}_{sub_end}'
         sub_p = f'p{sub_start}_{sub_end}'
 
+        if fanout < 2:
+            inverter = 'inverter'
+        elif fanout < 14:
+            inverter = 'inverter_2'
+        elif fanout < 32:
+            inverter = 'inverter_4'
+        else:
+            inverter = 'inverter_8'
+
+        chain_args = f'{sub_g} {sub_p} {prev_g} {combine_g}_inv'
+
         jsim_lines = [
             f'* carry propagate from bit {start} to bit {end}',
-            f'XCHAIN_G{c} {sub_g} {sub_p} {prev_g} {combine_g} g_prop',
+            # f'XCHAIN_G{c} {sub_g} {sub_p} {prev_g} {combine_g} g_prop',
+            f'XCHAIN_G{c} {chain_args} g_prop_inv',
+            f'XCHAIN_G{c}_INV {combine_g}_inv {combine_g} {inverter}',
             f'XCHAIN_P{c}_INV {prev_p} {sub_p} {combine_p}_inv nand2',
-            f'XCHAIN_P{c} {combine_p}_inv {combine_p} inverter_4'
+            f'XCHAIN_P{c} {combine_p}_inv {combine_p} {inverter}'
         ]
 
         if start == 0:

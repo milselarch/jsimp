@@ -149,8 +149,9 @@ class BrentKung(object):
             if carry_chain.to_tuple() == (0, 0):
                 continue
 
+            fanout = fanout_counts[carry_chain]
             carry_lines, counter = carry_chain.build_jsim(
-                counter=counter
+                counter=counter, fanout=fanout
             )
 
             jsim_lines.extend(carry_lines)
@@ -158,7 +159,7 @@ class BrentKung(object):
 
         adder_lines = [
             f'XKHA0 p0 s0 bus',
-            f'XKHA sp[31:1] c[30:0] s[31:1] xor2'
+            f'XKHA sp[31:1] c[30:0] s[31:1] fast_xor'
         ]
 
         jsim_lines.append('')
@@ -172,7 +173,7 @@ class BrentKung(object):
         jsim_code = '\n'.join(jsim_lines)
         print(jsim_code)
 
-        filepath = 'checkoffs/fast_adder32.jsim'
+        filepath = 'checkoffs/fast_adder32_v2.jsim'
         with open(filepath, 'w') as fileobj:
             fileobj.write(jsim_code)
 
