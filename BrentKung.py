@@ -97,7 +97,7 @@ class BrentKung(object):
             '.subckt adder32 subtract a[31:0] xb[31:0] s[31:0] z v n '
             '\n* p[31:0] c[31:0]',
             'XSUBTRACT_BUFFER subtract subtract_buffer buffer_8',
-            'XXOR_B xb[31:0] subtract_buffer#32 b[31:0] xor2',
+            'XXOR_B xb[31:0] subtract_buffer#32 b[31:0] fast_xor',
             'XBUS_C0 g0_0 c0 bus',
             'XBUS_P0 p0 p0_0 bus',
             'XBUS_G0 g0 g0_0 bus',
